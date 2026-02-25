@@ -78,9 +78,23 @@ class MLSharpService:
                 temp_image = temp_input_dir / image_path.name
                 shutil.copy2(image_path, temp_image)
                 
+                # Resolve sharp executable path
+                sharp_cmd = shutil.which("sharp")
+                if not sharp_cmd:
+                    bin_dir = os.path.dirname(sys.executable)
+                    if os.name == 'nt':
+                        sharp_cmd = os.path.join(bin_dir, "Scripts", "sharp.exe")
+                        if not os.path.exists(sharp_cmd):
+                            sharp_cmd = os.path.join(bin_dir, "sharp.exe")
+                    else:
+                        sharp_cmd = os.path.join(bin_dir, "sharp")
+                        
+                if not sharp_cmd or not os.path.exists(sharp_cmd):
+                    sharp_cmd = "sharp"  # fallback
+
                 # Run sharp predict command on temp directory
                 cmd = [
-                    "sharp", "predict",
+                    sharp_cmd, "predict",
                     "-i", str(temp_input_dir),
                     "-o", str(temp_output_dir),
                     "-c", str(self.model_path)
