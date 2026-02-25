@@ -283,44 +283,47 @@ export default {
 
     const captureScreenshot = () => {
         if (!renderer || !renderer.canvas) return
-        // Export at original image resolution
-        const targetWidth = props.originalWidth || renderer.canvas.width
-        const targetHeight = props.originalHeight || renderer.canvas.height
-        const previousWidth = renderer.canvas.width
-        const previousHeight = renderer.canvas.height
-
-        // Scale camera focal lengths proportionally so the view matches the UI
-        // Without this, enlarging the canvas makes the scene appear smaller
-        const scaleX = targetWidth / previousWidth
-        const scaleY = targetHeight / previousHeight
-        const prevFx = camera.data.fx
-        const prevFy = camera.data.fy
-        camera.data.fx = prevFx * scaleX
-        camera.data.fy = prevFy * scaleY
-
-        renderer.setSize(targetWidth, targetHeight)
-        controls.update()
+        
+        // 渲染最新的一帧保证在画面缓冲区内
         renderer.render(scene, camera)
 
         const sourceCanvas = renderer.canvas
-        const tempCanvas = document.createElement('canvas')
-        tempCanvas.width = targetWidth
-        tempCanvas.height = targetHeight
-        const ctx = tempCanvas.getContext('2d')
+        const targetWidth = props.originalWidth || sourceCanvas.width
+        const targetHeight = props.originalHeight || sourceCanvas.height
+
+        // 如果渲染分辨率跟目标分辨率一样，直接导出
+        if (targetWidth === sourceCanvas.width && targetHeight === sourceCanvas.height) {
+            const dataURL = sourceCanvas.toDataURL('image/png')
+            const link = document.createElement('a')
+            link.download = `gsplat-capture-${Date.now()}.png`
+            link.href = dataURL
+            link.click()
+            return
+        }
+
+        // 避免渲染出毛边：创建与原图尺寸一样大的离屏画布进行强制插值缩放放大
+        const offscreenCanvas = document.createElement('canvas')
+        offscreenCanvas.width = targetWidth
+        offscreenCanvas.height = targetHeight
+        
+        const ctx = offscreenCanvas.getContext('2d')
+        // 开启平滑插值抗锯齿放缩
+        ctx.imageSmoothingEnabled = true
+        ctx.imageSmoothingQuality = 'high'
+        
+        // 用黑色填充背景（防透明底）
         ctx.fillStyle = '#000000'
-        ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height)
-        ctx.drawImage(sourceCanvas, 0, 0)
-        const dataURL = tempCanvas.toDataURL('image/png')
+        ctx.fillRect(0, 0, targetWidth, targetHeight)
+        
+        // 把实际渲染的画布内容画进去撑满原图尺寸
+        ctx.drawImage(sourceCanvas, 0, 0, targetWidth, targetHeight)
+
+        // 导出最终大图
+        const dataURL = offscreenCanvas.toDataURL('image/png')
         const link = document.createElement('a')
         link.download = `gsplat-capture-${Date.now()}.png`
         link.href = dataURL
         link.click()
-
-        // Restore camera focal lengths and canvas size
-        camera.data.fx = prevFx
-        camera.data.fy = prevFy
-        renderer.setSize(previousWidth, previousHeight)
-        renderer.render(scene, camera)
     }
 
     onMounted(async () => {

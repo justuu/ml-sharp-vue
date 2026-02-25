@@ -22,6 +22,16 @@ export const api = {
     },
 
     /**
+     * Generate PLY file from OSS URL
+     * @param {string} url - Aliyun OSS URL to image
+     * @returns {Promise<{task_id: string, ply_filename: string, status: string}>}
+     */
+    async generateFromOssUrl(url) {
+        const response = await axios.post(`${API_BASE_URL}/generate_from_oss_url`, { url })
+        return response.data
+    },
+
+    /**
      * Get PLY file URL
      * @param {string} filename - PLY filename
      * @returns {string} URL to PLY file

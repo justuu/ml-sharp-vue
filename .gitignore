@@ -10,7 +10,7 @@ ENV/
 *.egg-info/
 dist/
 build/
-
+config.py
 # Backend specific
 backend/uploads/*
 !backend/uploads/.gitkeep

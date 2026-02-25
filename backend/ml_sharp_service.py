@@ -25,7 +25,7 @@ class MLSharpService:
             print("Installing ml-sharp...")
             subprocess.check_call([
                 sys.executable, "-m", "pip", "install",
-                "git+https://github.com/apple/ml-sharp.git"
+                "git+https://ghfast.top/https://github.com/apple/ml-sharp.git"
             ])
     
     def _ensure_model_downloaded(self):

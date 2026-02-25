@@ -2,9 +2,24 @@
   <div class="upload-container">
     <div class="upload-card card">
       <h1>🎨 ML-Sharp 3D 生成器</h1>
-      <p class="subtitle">上传图片,生成 3D Gaussian Splat 模型</p>
+      <p class="subtitle">上传图片或输入 OSS 链接,生成 3D Gaussian Splat 模型</p>
 
-      <div 
+      <!-- 选项卡切换 -->
+      <div class="tabs">
+        <button 
+          class="tab-btn" 
+          :class="{ active: inputMode === 'upload' }"
+          @click="inputMode = 'upload'"
+        >本地上传</button>
+        <button 
+          class="tab-btn" 
+          :class="{ active: inputMode === 'url' }"
+          @click="inputMode = 'url'"
+        >OSS 链接</button>
+      </div>
+
+      <!-- 本地上传模式 -->
+      <div v-show="inputMode === 'upload'"
         class="drop-zone"
         :class="{ 'drag-over': isDragging }"
         @drop.prevent="handleDrop"
@@ -39,9 +54,30 @@
         </div>
       </div>
 
+      <!-- OSS链接模式 -->
+      <div v-show="inputMode === 'url'" class="url-input-zone">
+        <div class="input-wrapper">
+          <input 
+            v-model="ossUrl" 
+            type="text" 
+            placeholder="请输入阿里云 OSS 图片链接..."
+            class="url-input"
+            @input="handleUrlInput"
+          />
+        </div>
+        
+        <div v-if="ossPreviewUrl" class="preview-container mt-2">
+          <img :src="ossPreviewUrl" alt="URL Preview" class="preview-image" @error="handleUrlError" />
+          <div class="file-info">
+            <p class="file-name">来自 OSS 的图片</p>
+          </div>
+          <button class="btn btn-remove" @click="clearUrl">清除</button>
+        </div>
+      </div>
+
       <button 
         class="btn btn-generate"
-        :disabled="!selectedFile || isProcessing"
+        :disabled="(!selectedFile && !validOssUrl) || isProcessing"
         @click="handleGenerate"
       >
         <span v-if="isProcessing" class="loading"></span>
@@ -78,6 +114,11 @@ export default {
   name: 'ImageUpload',
   emits: ['ply-generated', 'ply-selected'],
   setup(props, { emit }) {
+    const inputMode = ref('upload') // 'upload' or 'url'
+    const ossUrl = ref('')
+    const ossPreviewUrl = ref('')
+    const validOssUrl = ref(false)
+
     const selectedFile = ref(null)
     const previewUrl = ref(null)
     const imageWidth = ref(null)
@@ -139,6 +180,35 @@ export default {
       error.value = null
     }
 
+    const handleUrlInput = () => {
+      validOssUrl.value = false
+      ossPreviewUrl.value = ''
+      error.value = null
+      
+      const url = ossUrl.value.trim()
+      if (!url) return
+      
+      // Simple preview setting (assumes public read)
+      ossPreviewUrl.value = url
+      // We will assume it's valid if it starts to load or if text is entered
+      validOssUrl.value = true
+    }
+
+    const clearUrl = () => {
+      ossUrl.value = ''
+      ossPreviewUrl.value = ''
+      validOssUrl.value = false
+      imageWidth.value = null
+      imageHeight.value = null
+      error.value = null
+    }
+
+    const handleUrlError = () => {
+      // If image fails to load via URL, still allow submission as backend downloads it, 
+      // but preview will be broken. 
+      console.warn('OSS preview failed, it might be private. Will still attempt backend generation.')
+    }
+
     const formatFileSize = (bytes) => {
       if (bytes < 1024) return bytes + ' B'
       if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
@@ -146,18 +216,25 @@ export default {
     }
 
     const handleGenerate = async () => {
-      if (!selectedFile.value) return
+      if (inputMode.value === 'upload' && !selectedFile.value) return
+      if (inputMode.value === 'url' && !validOssUrl.value) return
 
       isProcessing.value = true
       error.value = null
 
       try {
-        const result = await api.uploadImage(selectedFile.value)
+        let result
+        if (inputMode.value === 'upload') {
+          result = await api.uploadImage(selectedFile.value)
+        } else {
+          result = await api.generateFromOssUrl(ossUrl.value.trim())
+        }
+        
         emit('ply-generated', {
           plyFilename: result.ply_filename,
           taskId: result.task_id,
-          imageWidth: imageWidth.value,
-          imageHeight: imageHeight.value
+          imageWidth: result.image_width || imageWidth.value || null,
+          imageHeight: result.image_height || imageHeight.value || null
         })
       } catch (err) {
         error.value = err.response?.data?.detail || '生成失败,请重试'
@@ -168,6 +245,10 @@ export default {
     }
 
     return {
+      inputMode,
+      ossUrl,
+      ossPreviewUrl,
+      validOssUrl,
       selectedFile,
       previewUrl,
       isDragging,
@@ -179,6 +260,9 @@ export default {
       handlePlySelect,
       handleDrop,
       removeFile,
+      clearUrl,
+      handleUrlInput,
+      handleUrlError,
       formatFileSize,
       handleGenerate
     }
@@ -291,5 +375,67 @@ h1 {
   border-radius: 8px;
   color: #c33;
   text-align: center;
+}
+
+.mt-2 {
+  margin-top: 1rem;
+}
+
+/* Tabs */
+.tabs {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  background-color: #f1f3f5;
+  border-radius: 8px;
+  padding: 0.3rem;
+}
+
+.tab-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0.8rem 1rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #6c757d;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.tab-btn.active {
+  background: #fff;
+  color: #667eea;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* URL Input */
+.url-input-zone {
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-wrapper {
+  width: 100%;
+}
+
+.url-input {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1rem;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.url-input:focus {
+  outline: none;
+  border-color: #667eea;
 }
 </style>
