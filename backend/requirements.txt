@@ -7,3 +7,4 @@ av<14.0.0
 numpy==1.26.4
 aiofiles==24.1.0
 huggingface-hub==0.26.2
+oss2
